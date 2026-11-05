@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ingenio - El Joven Einstein 3D</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(18, 26, 43, 0.85);
+            --accent-color: #00d2ff;
+            --accent-glow: rgba(0, 210, 255, 0.4);
+            --text-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Overlay de inicio para permisos de audio */
+        #splash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 14, 23, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #splash-overlay h1 {
+            font-size: 2.8rem;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+            text-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        #splash-overlay p {
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            color: #94a3b8;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #00d2ff, #0072ff);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 0 30px var(--accent-glow);
+            transition: all 0.3s ease;
+        }
+
+        .btn-start:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 45px rgba(0, 210, 255, 0.7);
+        }
+
+        /* UI Principal */
+        #ui-container {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            width: 90%;
+            max-width: 700px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            pointer-events: none;
+        }
+
+        .dialog-box {
+            background: var(--panel-bg);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            border-radius: 20px;
+            padding: 20px 25px;
+            width: 100%;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            pointer-events: auto;
+        }
+
+        .dialog-box h2 {
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .dialog-box p {
+            font-size: 1.1rem;
+            line-height: 1.5;
+            color: #f1f5f9;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
+        }
+
+        .btn-action {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            padding: 10px 24px;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-action:hover {
+            background: var(--accent-color);
+            color: #0b0f19;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        /* Indicador de habla corregido (Tamaño de punto adecuado) */
+        .speaking-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background-color: #10b981;
+            border-radius: 50%;
+            margin-left: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .speaking-indicator.active {
+            opacity: 1;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+
+    <!-- Three.js y OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <!-- Pantalla de inicio -->
+    <div id="splash-overlay">
+        <h1>¡Conoce a Ingenio!</h1>
+        <p>Un joven científico inspirado en Albert Einstein. Haz clic abajo para activar la experiencia tridimensional interactiva con voz.</p>
+        <button class="btn-start" onclick="startExperience()">¡CONOCER A INGENIO!</button>
+    </div>
+
+    <!-- Contenedor 3D -->
+    <div id="canvas-container"></div>
+
+    <!-- Interfaz de usuario -->
+    <div id="ui-container">
+        <div class="dialog-box">
+            <h2>Ingenio <span id="speech-dot" class="speaking-indicator"></span></h2>
+            <p id="speech-text">Presiona el botón para escuchar a Ingenio...</p>
+        </div>
+        <div class="controls">
+            <button class="btn-action" onclick="speakGreeting()">🔊 Hablar de nuevo</button>
+            <button class="btn-action" onclick="toggleCameraAutoRotate()">🔄 Cambiar Vista</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN THREE.JS ---
+        let scene, camera, renderer, controls;
+        let ingenioGroup, headGroup, jawMesh, mouthMesh;
+        let eyeLeft, eyeRight, eyebrowLeft, eyebrowRight;
+        let armLeft, armRight;
+
+        // --- ESTADOS DE ANIMACIÓN Y VOZ ---
+        let isSpeaking = false;
+        let mouthOpenAmount = 0;
+        let targetMouthOpen = 0;
+        let isAutoRotating = false;
+        let blinkTimer = 0;
+        let speechUtterance = null;
+
+        const greetingText = "¡Hola! Mucho gusto. Mi nombre es Ingenio. Soy un joven científico apasionado por la física, la química y los grandes misterios del universo. ¡Acompañame a descubrir cómo funciona el mundo!";
+
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+
+            // Escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
+            scene.fog = new THREE.FogExp2(0x0b0f19, 0.04);
+
+            // Cámara
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.4, 4.5);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 1.2, 0);
+            controls.maxPolarAngle = Math.PI / 2 + 0.1;
+            controls.minDistance = 2;
+            controls.maxDistance = 8;
+
+            // Iluminación
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            mainLight.position.set(3, 5, 4);
+            mainLight.castShadow = true;
+            scene.add(mainLight);
+
+            const fillLight = new THREE.DirectionalLight(0x00d2ff, 0.5);
+            fillLight.position.set(-4, 2, -2);
+            scene.add(fillLight);
+
+            const rimLight = new THREE.PointLight(0xff0077, 0.6, 10);
+            rimLight.position.set(0, 3, -3);
+            scene.add(rimLight);
+
+            // Suelo escénico
+            const floorGeo = new THREE.CircleGeometry(10, 32);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = 0;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Construir Personaje "Ingenio"
+            createIngenioCharacter();
+
+            // Eventos
+            window.addEventListener('resize', onWindowResize);
+
+            // Bucle de animación
+            animate();
+        }
+
+        // --- CONSTRUCCIÓN DEL PERSONAJE INGENIO ---
+        function createIngenioCharacter() {
+            ingenioGroup = new THREE.Group();
+            scene.add(ingenioGroup);
+
+            // Materiales
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.5 });
+            const coatMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4 });
+            const shirtMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.6 });
+            const bowMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3 });
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.9 });
+            const glassesMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.2 });
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+            const mouthMat = new THREE.MeshBasicMaterial({ color: 0x991b1b });
+
+            // 1. CUERPO (Bata y Camisa)
+            const torsoGeo = new THREE.CylinderGeometry(0.35, 0.45, 1.1, 16);
+            const torso = new THREE.Mesh(torsoGeo, coatMat);
+            torso.position.y = 0.55;
+            torso.castShadow = true;
+            ingenioGroup.add(torso);
+
+            // Pecho / Camisa interna
+            const innerShirtGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.6, 16);
+            const innerShirt = new THREE.Mesh(innerShirtGeo, shirtMat);
+            innerShirt.position.set(0, 0.75, 0.15);
+            ingenioGroup.add(innerShirt);
+
+            // Corbatín
+            const bowLeft = new THREE.ConeGeometry(0.1, 0.18, 4);
+            bowLeft.rotation.z = Math.PI / 2;
+            bowLeft.position.set(-0.08, 0.98, 0.32);
+            const bowRight = bowLeft.clone();
+            bowRight.rotation.z = -Math.PI / 2;
+            bowRight.position.set(0.08, 0.98, 0.32);
+            const bowCenter = new THREE.SphereGeometry(0.04, 8, 8);
+            bowCenter.position.set(0, 0.98, 0.33);
+
+            const bowGroup = new THREE.Group();
+            bowGroup.add(bowLeft, bowRight, bowCenter);
+            bowGroup.children.forEach(c => c.material = bowMat);
+            ingenioGroup.add(bowGroup);
+
+            // Brazos
+            armLeft = new THREE.Group();
+            const armGeo = new THREE.CylinderGeometry(0.09, 0.08, 0.7, 12);
+            const armLMesh = new THREE.Mesh(armGeo, coatMat);
+            armLMesh.position.y = -0.25;
+            armLMesh.castShadow = true;
+            armLeft.add(armLMesh);
+            armLeft.position.set(0.42, 0.95, 0);
+            armLeft.rotation.z = -0.2;
+            ingenioGroup.add(armLeft);
+
+            armRight = new THREE.Group();
+            const armRMesh = armLMesh.clone();
+            armRight.add(armRMesh);
+            armRight.position.set(-0.42, 0.95, 0);
+            armRight.rotation.z = 0.2;
+            ingenioGroup.add(armRight);
+
+            // 2. CABEZA Y ROSTRO
+            headGroup = new THREE.Group();
+            headGroup.position.y = 1.25;
+            ingenioGroup.add(headGroup);
+
+            // Craneo
+            const headGeo = new THREE.SphereGeometry(0.38, 32, 32);
+            headGeo.scale(1, 1.15, 1);
+            const headMesh = new THREE.Mesh(headGeo, skinMat);
+            headMesh.castShadow = true;
+            headGroup.add(headMesh);
+
+            // Ojos
+            const eyeGeo = new THREE.SphereGeometry(0.06, 16, 16);
+            eyeLeft = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeLeft.position.set(0.14, 0.08, 0.33);
+            eyeRight = eyeLeft.clone();
+            eyeRight.position.x = -0.14;
+            headGroup.add(eyeLeft, eyeRight);
+
+            // Cejas
+            const eyebrowGeo = new THREE.BoxGeometry(0.14, 0.03, 0.03);
+            eyebrowLeft = new THREE.Mesh(eyebrowGeo, hairMat);
+            eyebrowLeft.position.set(0.14, 0.18, 0.34);
+            eyebrowLeft.rotation.z = -0.1;
+            eyebrowRight = eyebrowLeft.clone();
+            eyebrowRight.position.x = -0.14;
+            eyebrowRight.rotation.z = 0.1;
+            headGroup.add(eyebrowLeft, eyebrowRight);
+
+            // Gafas (Estilo Einstein)
+            const glassRimGeo = new THREE.TorusGeometry(0.11, 0.02, 8, 24);
+            const glassRimL = new THREE.Mesh(glassRimGeo, glassesMat);
+            glassRimL.position.set(0.14, 0.07, 0.35);
+            const glassRimR = glassRimL.clone();
+            glassRimR.position.x = -0.14;
+
+            const bridgeGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.12, 8);
+            const bridge = new THREE.Mesh(bridgeGeo, glassesMat);
+            bridge.rotation.z = Math.PI / 2;
+            bridge.position.set(0, 0.08, 0.36);
+
+            headGroup.add(glassRimL, glassRimR, bridge);
+
+            // Nariz
+            const noseGeo = new THREE.ConeGeometry(0.05, 0.12, 12);
+            const nose = new THREE.Mesh(noseGeo, skinMat);
+            nose.position.set(0, 0.02, 0.38);
+            nose.rotation.x = 0.2;
+            headGroup.add(nose);
+
+            // BOCA (Lip-Sync Animado)
+            jawMesh = new THREE.Group();
+            jawMesh.position.set(0, -0.12, 0.32);
+
+            const mouthGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.04, 16, 1, false, 0, Math.PI);
+            mouthMesh = new THREE.Mesh(mouthGeo, mouthMat);
+            mouthMesh.rotation.x = Math.PI / 2;
+            mouthMesh.scale.set(1, 0.3, 0.2);
+            jawMesh.add(mouthMesh);
+            headGroup.add(jawMesh);
+
+            // 3. CABELLO EINSTEIN (Esferas desordenadas)
+            const hairGroup = new THREE.Group();
+            const hairPuffGeo = new THREE.SphereGeometry(0.16, 12, 12);
+
+            for (let i = 0; i < 45; i++) {
+                const hairPuff = new THREE.Mesh(hairPuffGeo, hairMat);
+                const u = Math.random() * Math.PI * 2;
+                const v = Math.random() * Math.PI * 0.6 + 0.2;
+                const radius = 0.36 + Math.random() * 0.08;
+
+                hairPuff.position.set(
+                    radius * Math.sin(v) * Math.cos(u),
+                    radius * Math.cos(v) + 0.1,
+                    radius * Math.sin(v) * Math.sin(u) - 0.05
+                );
+
+                const scale = 0.6 + Math.random() * 0.7;
+                hairPuff.scale.set(scale, scale, scale);
+                hairGroup.add(hairPuff);
+            }
+            headGroup.add(hairGroup);
+        }
+
+        // --- SISTEMA DE VOZ & LIP-SYNC ---
+        function initSpeech() {
+            if (!('speechSynthesis' in window)) {
+                document.getElementById('speech-text').innerText = "Tu navegador no soporta reproducción de voz sintética.";
+                return;
+            }
+
+            speechUtterance = new SpeechSynthesisUtterance(greetingText);
+            speechUtterance.lang = 'es-VE';
+            speechUtterance.pitch = 1.2;
+            speechUtterance.rate = 1.0;
+
+            window.speechSynthesis.onvoiceschanged = () => {
+                const voices = window.speechSynthesis.getVoices();
+                const esVoice = voices.find(v => v.lang.includes('es-VE') || v.lang.includes('es-MX') || v.lang.includes('es-419') || v.lang.includes('es'));
+                if (esVoice) speechUtterance.voice = esVoice;
+            };
+
+            speechUtterance.onstart = () => {
+                isSpeaking = true;
+                document.getElementById('speech-dot').classList.add('active');
+            };
+
+            speechUtterance.onend = () => {
+                isSpeaking = false;
+                targetMouthOpen = 0;
+                document.getElementById('speech-dot').classList.remove('active');
+            };
+
+            speechUtterance.onboundary = (event) => {
+                if (event.name === 'word' || event.name === 'syllable') {
+                    targetMouthOpen = 0.6 + Math.random() * 0.5;
+                    setTimeout(() => { targetMouthOpen = 0.1; }, 120);
+                }
+            };
+        }
+
+        function speakGreeting() {
+            if (!speechUtterance) return;
+            window.speechSynthesis.cancel();
+            document.getElementById('speech-text').innerText = `"${greetingText}"`;
+            window.speechSynthesis.speak(speechUtterance);
+        }
+
+        function startExperience() {
+            document.getElementById('splash-overlay').style.display = 'none';
+            initSpeech();
+            setTimeout(() => {
+                speakGreeting();
+            }, 300);
+        }
+
+        function toggleCameraAutoRotate() {
+            isAutoRotating = !isAutoRotating;
+            controls.autoRotate = isAutoRotating;
+            controls.autoRotateSpeed = 2.0;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = Date.now() * 0.003;
+
+            if (isSpeaking) {
+                mouthOpenAmount += (targetMouthOpen - mouthOpenAmount) * 0.3;
+                if (Math.random() < 0.2) targetMouthOpen = Math.random() * 0.8;
+            } else {
+                mouthOpenAmount += (0 - mouthOpenAmount) * 0.2;
+            }
+
+            if (mouthMesh) {
+                mouthMesh.scale.y = 0.3 + mouthOpenAmount * 1.5;
+                mouthMesh.scale.x = 1 - mouthOpenAmount * 0.3;
+            }
+
+            if (headGroup) {
+                headGroup.rotation.y = Math.sin(time * 0.5) * 0.08;
+                headGroup.rotation.x = (Math.cos(time * 0.7) * 0.05) + (isSpeaking ? Math.sin(time * 8) * 0.04 : 0);
+            }
+
+            if (armLeft && armRight) {
+                armLeft.rotation.x = isSpeaking ? Math.sin(time * 4) * 0.2 - 0.2 : 0;
+                armRight.rotation.x = isSpeaking ? Math.cos(time * 4) * 0.2 - 0.2 : 0;
+            }
+
+            blinkTimer += 0.016;
+            if (blinkTimer > 3) {
+                if (eyeLeft && eyeRight) {
+                    eyeLeft.scale.y = 0.1;
+                    eyeRight.scale.y = 0.1;
+                    setTimeout(() => {
+                        eyeLeft.scale.y = 1;
+                        eyeRight.scale.y = 1;
+                    }, 150);
+                }
+                blinkTimer = 0;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = init3D;
+    </script>
+</body>
+</html>
